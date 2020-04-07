@@ -28,12 +28,13 @@ class Vehicle:
 
     @location.setter
     def location(self, location):
+        self._history.append(self._location)
         self._location = location
 
-    def accept(self, location):
+    '''def accept(self, location):
         self._location = location
         #self._size = size
-        self._detected = True
+        self._detected = True'''
 
     def reject(self):
         self._detected = False
@@ -50,7 +51,7 @@ class VehicleDetector:
 
     no_of_detected_vehicles = 0
 
-    detected_vehicles = []
+    detected_vehicles = deque([])
 
     def __init__(self, model, n_history=50):
         self._model = model
@@ -90,6 +91,16 @@ class VehicleDetector:
         top_xmax = det_xmax[top_indices]
         top_ymax = det_ymax[top_indices]
 
+        top_indices = [i for i, ymax in enumerate(top_ymax) if (int(round(ymax * img.shape[0])) > 200 and int(round(ymax * img.shape[0])) < 250)]
+        top_conf = top_conf[top_indices]
+        top_label_indices = det_label[top_indices].tolist()
+        top_xmin = top_xmin[top_indices]
+        top_ymin = top_ymin[top_indices]
+        top_xmax = top_xmax[top_indices]
+        top_ymax = top_ymax[top_indices]
+        #print(int(round(j * img.shape[0])) for i, j in enumerate(top_ymax))
+        #print('----------------')
+
         colors = {
             'Car': (255, 128, 0),
             'Bus': (0, 0, 255),
@@ -97,7 +108,8 @@ class VehicleDetector:
             'Bicycle': (255, 0, 128),
             'Person': (255, 0, 0)
         }
-
+        #if top_conf.shape[0]==0 and VehicleDetector.no_of_detected_vehicles>0:
+        #    detected_vehicles.popleft()
         for i in range(top_conf.shape[0]):
             xmin = int(round(top_xmin[i] * img.shape[1]))
             ymin = int(round(top_ymin[i] * img.shape[0]))
@@ -108,7 +120,8 @@ class VehicleDetector:
             label_name = cls.voc_classes[label - 1]
             display_text = '{} [{:0.2f}]'.format(label_name, score)
             if label_name in set(('Car', 'Bus', 'Motorbike', 'Bicycle')):#, 'Person')):
-                if ymax < 210:
+                '''Counting logic starts here'''
+                if ymax > 200 and ymax < 250:
                     color = colors[label_name]
                     size = draw.textsize(display_text, font)
                     #_draw_rectangle(draw, (xmin, ymin, xmax, ymax), color)
@@ -123,17 +136,25 @@ class VehicleDetector:
                             #print(VehicleDetector.no_of_detected_vehicles)
                             save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
                         else:
-                            vehicle_found = False
+                            old_vehicle = False
                             for vehicle in VehicleDetector.detected_vehicles:
-                                if ymax > vehicle.location[3]:
+                                #print(f'{ymax} , {vehicle.location[3]}') 
+                                if abs(ymax - vehicle.location[3]) < 10:
+                                #if ymax > vehicle.location[3]:
                                     vehicle.location = [xmin, ymin, xmax, ymax]
-                                    vehicle_found = True
+                                    #vehicle.accept([xmin, ymin, xmax, ymax])
+                                    old_vehicle = True
                                     break
-                            if not vehicle_found:
-                                VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
-                                VehicleDetector.no_of_detected_vehicles += 1
-                                #print(VehicleDetector.no_of_detected_vehicles)
-                                save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
+                            if not old_vehicle:
+                                if ymax < 220:
+                                    VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
+                                    VehicleDetector.no_of_detected_vehicles += 1
+                                    #print(VehicleDetector.no_of_detected_vehicles)
+                                    save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
+                                else:
+                                    VehicleDetector.detected_vehicles[-1].location = [xmin, ymin, xmax, ymax]
+                            '''Counting logic ends here'''
+        #print(len(VehicleDetector.detected_vehicles))
         count_text = 'Count = {}'.format(VehicleDetector.no_of_detected_vehicles)
         size = draw.textsize(count_text, font)
         draw.rectangle((0, 0, size[0] + 2*padding, size[1] + 2*padding), fill=(255, 128, 0))#, 40))
