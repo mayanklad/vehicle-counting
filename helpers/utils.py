@@ -31,13 +31,12 @@ class Vehicle:
         self._history.append(self._location)
         self._location = location
 
-    '''def accept(self, location):
+    def setLocation(self, location):
         self._location = location
         #self._size = size
-        self._detected = True'''
 
-    def reject(self):
-        self._detected = False
+    def getLocation(self):
+        return self._location
 
 class VehicleDetector:
     voc_classes = ['Aeroplane', 'Bicycle', 'Bird', 'Boat', 'Bottle',
@@ -46,16 +45,15 @@ class VehicleDetector:
                    'Sheep', 'Sofa', 'Train', 'Tvmonitor']
 
     NUM_CLASSES = len(voc_classes) + 1
-
     _threshold = 0.5
-
     no_of_detected_vehicles = 0
-
     detected_vehicles = deque([])
 
     def __init__(self, model, n_history=50):
         self._model = model
         self._bbox_util = BBoxUtility(self.NUM_CLASSES)
+        VehicleDetector.no_of_detected_vehicles = 0
+        VehicleDetector.detected_vehicles = deque([])
 
     @classmethod
     def draw_boxes(cls, img, results):
@@ -138,15 +136,16 @@ class VehicleDetector:
                         else:
                             old_vehicle = False
                             for vehicle in VehicleDetector.detected_vehicles:
-                                #print(f'{ymax} , {vehicle.location[3]}') 
-                                if abs(ymax - vehicle.location[3]) < 10:
+                                print(f'{ymax} , {vehicle.location[3]}') 
+                                if abs(ymax - (vehicle.getLocation())[3]) < 10:
                                 #if ymax > vehicle.location[3]:
-                                    vehicle.location = [xmin, ymin, xmax, ymax]
+                                    vehicle.setLocation([xmin, ymin, xmax, ymax])
                                     #vehicle.accept([xmin, ymin, xmax, ymax])
                                     old_vehicle = True
                                     break
                             if not old_vehicle:
                                 if ymax < 220:
+                                    VehicleDetector.detected_vehicles.popleft()
                                     VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
                                     VehicleDetector.no_of_detected_vehicles += 1
                                     #print(VehicleDetector.no_of_detected_vehicles)
@@ -154,7 +153,7 @@ class VehicleDetector:
                                 else:
                                     VehicleDetector.detected_vehicles[-1].location = [xmin, ymin, xmax, ymax]
                             '''Counting logic ends here'''
-        #print(len(VehicleDetector.detected_vehicles))
+        print(len(VehicleDetector.detected_vehicles))
         count_text = 'Count = {}'.format(VehicleDetector.no_of_detected_vehicles)
         size = draw.textsize(count_text, font)
         draw.rectangle((0, 0, size[0] + 2*padding, size[1] + 2*padding), fill=(255, 128, 0))#, 40))
