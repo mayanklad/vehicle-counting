@@ -3,8 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-.vscode/
-
 # C extensions
 *.so
 
@@ -129,4 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Directories
 weights_SSD300.hdf5
+.vscode/
+detected_vehicles/
+output_images/
+output_videos/
+test_images/
+test_videos/
