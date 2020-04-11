@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 from keras.preprocessing import image
@@ -7,7 +8,9 @@ from PIL import Image, ImageFont, ImageDraw
 
 from .ssd_utils import BBoxUtility
 from .image_saver import save_image
+from .color_recognition_module.color_classification_image import color_recognition
 
+current_path = os.getcwd()
 
 class Vehicle:
 
@@ -56,7 +59,7 @@ class VehicleDetector:
         VehicleDetector.detected_vehicles = deque([])
 
     @classmethod
-    def draw_boxes(cls, img, results):
+    def draw_boxes(cls, img, results, ROI):
         draw_img = Image.fromarray(img)
         width, height = draw_img.size
         draw = ImageDraw.Draw(draw_img, mode='RGBA')
@@ -64,7 +67,7 @@ class VehicleDetector:
         padding = 2
 
         for i in range(6):
-            draw.line([(0, 200+ i*10 ), (width, 200+ i*10)], fill='red',width=0)
+            draw.line([(0, ROI+ i*10 ), (width, ROI+ i*10)], fill='red',width=0)
 
         # Parse the outputs.
         det_label = results[:, 0]
@@ -78,26 +81,19 @@ class VehicleDetector:
         top_indices = [i for i, conf in enumerate(det_conf) if conf >= cls._threshold]
 
         top_conf = det_conf[top_indices]
-        '''print('--------------')
-        print(top_conf)
-        print('---------------')
-        print(top_indices)
-        print('---------')'''
         top_label_indices = det_label[top_indices].tolist()
         top_xmin = det_xmin[top_indices]
         top_ymin = det_ymin[top_indices]
         top_xmax = det_xmax[top_indices]
         top_ymax = det_ymax[top_indices]
 
-        top_indices = [i for i, ymax in enumerate(top_ymax) if (int(round(ymax * img.shape[0])) > 200 and int(round(ymax * img.shape[0])) < 250)]
+        top_indices = [i for i, ymax in enumerate(top_ymax) if (int(round(ymax * img.shape[0])) > ROI and int(round(ymax * img.shape[0])) < ROI+50)]
         top_conf = top_conf[top_indices]
         top_label_indices = det_label[top_indices].tolist()
         top_xmin = top_xmin[top_indices]
         top_ymin = top_ymin[top_indices]
         top_xmax = top_xmax[top_indices]
         top_ymax = top_ymax[top_indices]
-        #print(int(round(j * img.shape[0])) for i, j in enumerate(top_ymax))
-        #print('----------------')
 
         colors = {
             'Car': (255, 128, 0),
@@ -106,8 +102,7 @@ class VehicleDetector:
             'Bicycle': (255, 0, 128),
             'Person': (255, 0, 0)
         }
-        #if top_conf.shape[0]==0 and VehicleDetector.no_of_detected_vehicles>0:
-        #    detected_vehicles.popleft()
+
         for i in range(top_conf.shape[0]):
             xmin = int(round(top_xmin[i] * img.shape[1]))
             ymin = int(round(top_ymin[i] * img.shape[0]))
@@ -119,7 +114,7 @@ class VehicleDetector:
             display_text = '{} [{:0.2f}]'.format(label_name, score)
             if label_name in set(('Car', 'Bus', 'Motorbike', 'Bicycle')):#, 'Person')):
                 '''Counting logic starts here'''
-                if ymax > 200 and ymax < 250:
+                if ymax > ROI and ymax < ROI+50:
                     color = colors[label_name]
                     size = draw.textsize(display_text, font)
                     #_draw_rectangle(draw, (xmin, ymin, xmax, ymax), color)
@@ -127,32 +122,33 @@ class VehicleDetector:
                     _draw_rectangle(draw, (xmin, ymin, xmin + size[0] + 2*padding, ymin - size[1] - 2*padding), None, fill=(*color, 40))
                     draw.text((xmin + padding, ymin - size[1] - padding - 2), display_text, (255, 255, 255), font=font)
                     
-                    if ymax > 200:
+                    if ymax > ROI:
                         if VehicleDetector.no_of_detected_vehicles == 0:
                             VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
                             VehicleDetector.no_of_detected_vehicles += 1
-                            #print(VehicleDetector.no_of_detected_vehicles)
                             save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
+                            color_recognition(cv2.imread(current_path+'/detected_vehicles/vehicle{}.jpg'.format(VehicleDetector.no_of_detected_vehicles)))
                         else:
                             old_vehicle = False
                             for vehicle in VehicleDetector.detected_vehicles:
                                 print(f'{ymax} , {vehicle.location[3]}') 
                                 if abs(ymax - (vehicle.getLocation())[3]) < 10:
-                                #if ymax > vehicle.location[3]:
                                     vehicle.setLocation([xmin, ymin, xmax, ymax])
                                     #vehicle.accept([xmin, ymin, xmax, ymax])
                                     old_vehicle = True
                                     break
                             if not old_vehicle:
-                                if ymax < 220:
+                                if ymax < ROI+20:
                                     VehicleDetector.detected_vehicles.popleft()
                                     VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
                                     VehicleDetector.no_of_detected_vehicles += 1
                                     #print(VehicleDetector.no_of_detected_vehicles)
                                     save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
+                                    color_recognition(cv2.imread(current_path+'/detected_vehicles/vehicle{}.jpg'.format(VehicleDetector.no_of_detected_vehicles)))
                                 else:
                                     VehicleDetector.detected_vehicles[-1].location = [xmin, ymin, xmax, ymax]
                             '''Counting logic ends here'''
+
         print(len(VehicleDetector.detected_vehicles))
         count_text = 'Count = {}'.format(VehicleDetector.no_of_detected_vehicles)
         size = draw.textsize(count_text, font)
@@ -173,7 +169,7 @@ class VehicleDetector:
         preds = self._model.predict(inputs, batch_size=1, verbose=0)
         results = self._bbox_util.detection_out(preds)
 
-        final_img = self.draw_boxes(input_img, results[0])
+        final_img = self.draw_boxes(input_img, results[0], ROI=200)
 
         return final_img
 
