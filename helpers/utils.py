@@ -1,4 +1,7 @@
 import os
+import pytz
+from uuid import uuid4
+from datetime import datetime
 import cv2
 import numpy as np
 from keras.preprocessing import image
@@ -8,6 +11,7 @@ from PIL import Image, ImageFont, ImageDraw
 
 from .ssd_utils import BBoxUtility
 from .image_saver import save_image
+from .excel_saver import save_excel
 from .color_recognition_module.color_classification_image import color_recognition
 
 current_path = os.getcwd()
@@ -97,7 +101,7 @@ class VehicleDetector:
 
         colors = {
             'Car': (255, 128, 0),
-            'Bus': (0, 0, 255),
+            'Multi-axle': (0, 0, 255),
             'Motorbike': (128, 0, 255),
             'Bicycle': (255, 0, 128),
             'Person': (255, 0, 0)
@@ -111,8 +115,10 @@ class VehicleDetector:
             score = top_conf[i]
             label = int(top_label_indices[i])
             label_name = cls.voc_classes[label - 1]
+            if label_name == 'Bus' or label_name == 'bus':
+                label_name = 'Multi-axle'
             display_text = '{} [{:0.2f}]'.format(label_name, score)
-            if label_name in set(('Car', 'Bus', 'Motorbike', 'Bicycle')):#, 'Person')):
+            if label_name in set(('Car', 'Multi-axle', 'Motorbike', 'Bicycle')):
                 '''Counting logic starts here'''
                 if ymax > ROI and ymax < ROI+50:
                     color = colors[label_name]
@@ -123,15 +129,20 @@ class VehicleDetector:
                     draw.text((xmin + padding, ymin - size[1] - padding - 2), display_text, (255, 255, 255), font=font)
                     
                     if ymax > ROI:
+                        filename = current_path + '/detection-report.xlsx'
+                        vehicle_name = 'vehicle-' + str(uuid4())
+                        current_datetime = datetime.now(pytz.timezone('Asia/Kolkata'))
+
                         if VehicleDetector.no_of_detected_vehicles == 0:
                             VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
                             VehicleDetector.no_of_detected_vehicles += 1
-                            save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
-                            color_recognition(cv2.imread(current_path+'/detected_vehicles/vehicle{}.jpg'.format(VehicleDetector.no_of_detected_vehicles)))
+                            save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), vehicle_name)
+                            detected_color = color_recognition(cv2.imread(current_path+'/detected_vehicles/'+vehicle_name+'.jpg'))
+                            save_excel(detections=[[vehicle_name, label_name, detected_color, current_datetime.year, current_datetime.month, current_datetime.day, current_datetime.hour, current_datetime.minute, current_datetime.second]], file_name=filename)
                         else:
                             old_vehicle = False
                             for vehicle in VehicleDetector.detected_vehicles:
-                                print(f'{ymax} , {vehicle.location[3]}') 
+                                # print(f'{ymax} , {vehicle.location[3]}') 
                                 if abs(ymax - (vehicle.getLocation())[3]) < 10:
                                     vehicle.setLocation([xmin, ymin, xmax, ymax])
                                     #vehicle.accept([xmin, ymin, xmax, ymax])
@@ -143,13 +154,14 @@ class VehicleDetector:
                                     VehicleDetector.detected_vehicles.append(Vehicle([xmin, ymin, xmax, ymax], label_name))
                                     VehicleDetector.no_of_detected_vehicles += 1
                                     #print(VehicleDetector.no_of_detected_vehicles)
-                                    save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), VehicleDetector.no_of_detected_vehicles)
-                                    color_recognition(cv2.imread(current_path+'/detected_vehicles/vehicle{}.jpg'.format(VehicleDetector.no_of_detected_vehicles)))
+                                    save_image(((Image.fromarray(img)).crop((xmin, ymin, xmax, ymax))), vehicle_name)
+                                    detected_color = color_recognition(cv2.imread(current_path+'/detected_vehicles/'+vehicle_name+'.jpg'))
+                                    save_excel(detections=[[vehicle_name, label_name, detected_color, current_datetime.year, current_datetime.month, current_datetime.day, current_datetime.hour, current_datetime.minute, current_datetime.second]], file_name=filename)
                                 else:
                                     VehicleDetector.detected_vehicles[-1].location = [xmin, ymin, xmax, ymax]
                             '''Counting logic ends here'''
 
-        print(len(VehicleDetector.detected_vehicles))
+        # print(len(VehicleDetector.detected_vehicles))
         count_text = 'Count = {}'.format(VehicleDetector.no_of_detected_vehicles)
         size = draw.textsize(count_text, font)
         draw.rectangle((0, 0, size[0] + 2*padding, size[1] + 2*padding), fill=(255, 128, 0))#, 40))
